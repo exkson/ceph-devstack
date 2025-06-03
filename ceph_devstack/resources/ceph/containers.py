@@ -170,53 +170,6 @@ class TestNode(Container):
         "AUDIT_WRITE",
         "AUDIT_CONTROL",
     ]
-    create_cmd = [
-        "podman",
-        "container",
-        "create",
-        "--rm",
-        "-i",
-        "--network",
-        "ceph-devstack",
-        "--systemd=always",
-        "--cgroupns=host",
-        "--secret",
-        "id_rsa.pub",
-        "-p",
-        "22",
-        "--cap-add",
-        ",".join(capabilities),
-        "--security-opt",
-        "unmask=/sys/dev/block",
-        "-v",
-        "/sys/dev/block:/sys/dev/block",
-        "-v",
-        "/sys/fs/cgroup:/sys/fs/cgroup",
-        "-v",
-        "/dev/fuse:/dev/fuse",
-        "-v",
-        "/dev/disk:/dev/disk",
-        # cephadm tries to access these DMI-related files, and by default they
-        # have 600 permissions on the host. It appears to be ok if they are
-        # empty, though.
-        # The below was bizarrely causing this error message:
-        # No such file or directory: OCI runtime attempted to invoke a command that was
-        # not found
-        # That was causing the container to fail to start up.
-        # "-v",
-        # "/dev/null:/sys/class/dmi/id/board_serial",
-        "-v",
-        "/dev/null:/sys/class/dmi/id/chassis_serial",
-        "-v",
-        "/dev/null:/sys/class/dmi/id/product_serial",
-        "--device",
-        "/dev/net/tun",
-        "--device",
-        "{loop_dev_name}",
-        "--name",
-        "{name}",
-        "{image}",
-    ]
     env_vars = {
         "SSH_PUBKEY": "",
         "CEPH_VOLUME_ALLOW_LOOP_DEVICES": "true",
@@ -236,37 +189,94 @@ class TestNode(Container):
     def loop_img_dir(self):
         return (Path(config["data_dir"]) / "disk_images").expanduser()
 
+    @property
+    def create_cmd(self):
+        return [
+            "podman",
+            "container",
+            "create",
+            "--rm",
+            "-i",
+            "--network",
+            "ceph-devstack",
+            "--systemd=always",
+            "--cgroupns=host",
+            "--secret",
+            "id_rsa.pub",
+            "-p",
+            "22",
+            "--cap-add",
+            ",".join(self.capabilities),
+            "--security-opt",
+            "unmask=/sys/dev/block",
+            "-v",
+            "/sys/dev/block:/sys/dev/block",
+            "-v",
+            "/sys/fs/cgroup:/sys/fs/cgroup",
+            "-v",
+            "/dev/fuse:/dev/fuse",
+            "-v",
+            "/dev/disk:/dev/disk",
+            # cephadm tries to access these DMI-related files, and by default they
+            # have 600 permissions on the host. It appears to be ok if they are
+            # empty, though.
+            # The below was bizarrely causing this error message:
+            # No such file or directory: OCI runtime attempted to invoke a command that was
+            # not found
+            # That was causing the container to fail to start up.
+            # "-v",
+            # "/dev/null:/sys/class/dmi/id/board_serial",
+            "-v",
+            "/dev/null:/sys/class/dmi/id/chassis_serial",
+            "-v",
+            "/dev/null:/sys/class/dmi/id/product_serial",
+            "--device",
+            "/dev/net/tun",
+            *self.loop_devices_mapping(),
+            "--name",
+            "{name}",
+            "{image}",
+        ]
+
     async def create(self):
         if not await self.exists():
-            await self.create_loop_device()
+            await self.create_loop_devices()
         await super().create()
 
     async def remove(self):
         await super().remove()
-        await self.remove_loop_device()
+        await self.remove_loop_devices()
 
-    async def create_loop_device(self):
+    async def create_loop_devices(self):
+        for i in range(2):
+            await self.create_loop_device(i)
+
+    def loop_devices_mapping(self):
+        return [f"--device={self.loop_dev_name}.{i}" for i in range(2)]
+
+    async def create_loop_device(self, index: int):
         size_gb = 5
         os.makedirs(self.loop_img_dir, exist_ok=True)
         proc = await self.cmd(["lsmod", "|", "grep", "loop"])
         if proc and await proc.wait() != 0:
             await self.cmd(["sudo", "modprobe", "loop"])
-        loop_img_name = os.path.join(self.loop_img_dir, self.loop_img_name)
-        await self.remove_loop_device()
+        loop_img_name = os.path.join(self.loop_img_dir, f"{self.loop_img_name}.{index}")
+        loop_dev_name = f"{self.loop_dev_name}.{index}"
+        await self.remove_loop_device(index)
         await self.cmd(
             [
                 "sudo",
                 "mknod",
                 "-m700",
-                self.loop_dev_name,
+                loop_dev_name,
                 "b",
                 "7",
-                str(self.loop_index),
+                f"{self.loop_index}{index}",
             ],
             check=True,
         )
         await self.cmd(
-            ["sudo", "chown", f"{os.getuid()}:{os.getgid()}", self.loop_dev_name],
+            ["sudo", "chown", f"{os.getuid()}:{os.getgid()}", loop_dev_name],
             check=True,
         )
         await self.cmd(
@@ -281,17 +291,20 @@ class TestNode(Container):
             ],
             check=True,
         )
-        await self.cmd(
-            ["sudo", "losetup", self.loop_dev_name, loop_img_name], check=True
-        )
+        await self.cmd(["sudo", "losetup", loop_dev_name, loop_img_name], check=True)
 
-    async def remove_loop_device(self):
-        loop_img_name = os.path.join(self.loop_img_dir, self.loop_img_name)
-        if os.path.ismount(self.loop_dev_name):
-            await self.cmd(["umount", self.loop_dev_name], check=True)
-        if host.path_exists(self.loop_dev_name):
-            await self.cmd(["sudo", "losetup", "-d", self.loop_dev_name])
-            await self.cmd(["sudo", "rm", "-f", self.loop_dev_name], check=True)
+    async def remove_loop_devices(self):
+        for i in range(2):
+            await self.remove_loop_device(i)
+
+    async def remove_loop_device(self, index: int):
+        loop_img_name = os.path.join(self.loop_img_dir, f"{self.loop_img_name}.{index}")
+        loop_dev_name = f"{self.loop_dev_name}.{index}"
+        if os.path.ismount(loop_dev_name):
+            await self.cmd(["umount", loop_dev_name], check=True)
+        if host.path_exists(loop_dev_name):
+            await self.cmd(["sudo", "losetup", "-d", loop_dev_name])
+            await self.cmd(["sudo", "rm", "-f", loop_dev_name], check=True)
         if host.path_exists(loop_img_name):
             os.remove(loop_img_name)
 

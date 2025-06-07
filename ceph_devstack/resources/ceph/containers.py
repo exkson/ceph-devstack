@@ -174,6 +174,7 @@ class TestNode(Container):
         "SSH_PUBKEY": "",
         "CEPH_VOLUME_ALLOW_LOOP_DEVICES": "true",
     }
+    osd_count = config["containers"]["testnode"]["osd_count"]
 
     def __init__(self, name: str = ""):
         super().__init__(name=name)
@@ -248,11 +249,11 @@ class TestNode(Container):
         await self.remove_loop_devices()
 
     async def create_loop_devices(self):
-        for i in range(2):
+        for i in range(self.osd_count):
             await self.create_loop_device(i)
 
     def loop_devices_mapping(self):
-        return [f"--device={self.loop_dev_name}.{i}" for i in range(2)]
+        return [f"--device={self.loop_dev_name}.{i}" for i in range(self.osd_count)]
 
     async def create_loop_device(self, index: int):
         size_gb = 5
@@ -294,7 +295,7 @@ class TestNode(Container):
         await self.cmd(["sudo", "losetup", loop_dev_name, loop_img_name], check=True)
 
     async def remove_loop_devices(self):
-        for i in range(2):
+        for i in range(self.osd_count):
             await self.remove_loop_device(i)
 
     async def remove_loop_device(self, index: int):

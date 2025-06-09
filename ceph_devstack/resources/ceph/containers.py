@@ -21,7 +21,7 @@ class Postgres(Container):
         "--network",
         "ceph-devstack",
         "-p",
-        "5432:5432",
+        "5431:5432",
         "--health-cmd",
         "CMD pg_isready -q -d paddles -U admin",
         "--health-interval",
@@ -174,7 +174,6 @@ class TestNode(Container):
         "SSH_PUBKEY": "",
         "CEPH_VOLUME_ALLOW_LOOP_DEVICES": "true",
     }
-    osd_count = config["containers"]["testnode"]["osd_count"]
 
     def __init__(self, name: str = ""):
         super().__init__(name=name)
@@ -185,6 +184,7 @@ class TestNode(Container):
         else:
             self.loop_img_name += str(self.loop_index)
         self.loop_dev_name = f"/dev/loop{self.loop_index}"
+        self.osd_count = config["containers"]["testnode"]["osd_count"]
 
     @property
     def loop_img_dir(self):

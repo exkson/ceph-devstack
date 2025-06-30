@@ -252,8 +252,13 @@ class TestNode(Container):
         for i in range(self.osd_count):
             await self.create_loop_device(i)
 
+    def device_name(self, index: int):
+        if self.loop_index == 0:
+            return f"/dev/loop{index}"
+        return f"{self.loop_dev_name}{index}"
+
     def loop_devices_mapping(self):
-        return [f"--device={self.loop_dev_name}.{i}" for i in range(self.osd_count)]
+        return [f"--device={self.device_name(i)}" for i in range(self.osd_count)]
 
     async def create_loop_device(self, index: int):
         size_gb = 5
@@ -262,7 +267,7 @@ class TestNode(Container):
         if proc and await proc.wait() != 0:
             await self.cmd(["sudo", "modprobe", "loop"])
         loop_img_name = os.path.join(self.loop_img_dir, f"{self.loop_img_name}.{index}")
-        loop_dev_name = f"{self.loop_dev_name}.{index}"
+        loop_dev_name = self.device_name(index)
         await self.remove_loop_device(index)
         await self.cmd(
             [
@@ -300,7 +305,7 @@ class TestNode(Container):
 
     async def remove_loop_device(self, index: int):
         loop_img_name = os.path.join(self.loop_img_dir, f"{self.loop_img_name}.{index}")
-        loop_dev_name = f"{self.loop_dev_name}.{index}"
+        loop_dev_name = self.device_name(index)
         if os.path.ismount(loop_dev_name):
             await self.cmd(["umount", loop_dev_name], check=True)
         if host.path_exists(loop_dev_name):

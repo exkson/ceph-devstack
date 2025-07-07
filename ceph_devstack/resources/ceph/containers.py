@@ -203,8 +203,8 @@ class TestNode(Container):
         # No such file or directory: OCI runtime attempted to invoke a command that was
         # not found
         # That was causing the container to fail to start up.
-        # "-v",
-        # "/dev/null:/sys/class/dmi/id/board_serial",
+        "-v",
+        "/dev/null:/sys/class/dmi/id/board_serial",
         "-v",
         "/dev/null:/sys/class/dmi/id/chassis_serial",
         "-v",

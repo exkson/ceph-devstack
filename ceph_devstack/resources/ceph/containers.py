@@ -184,7 +184,12 @@ class TestNode(Container):
         else:
             self.loop_img_name += str(self.loop_index)
         self.loop_dev_name = f"/dev/loop{self.loop_index}"
-        self.osd_count = config["containers"]["testnode"]["osd_count"]
+        self.osd_count = int(
+            os.getenv(
+                "CEPH_OSD_COUNT", config["containers"]["testnode"].get("osd_count", 1)
+            )
+        )
+        self.devices = [self.device_name(i) for i in range(self.osd_count)]
 
     @property
     def loop_img_dir(self):
@@ -233,7 +238,7 @@ class TestNode(Container):
             "/dev/null:/sys/class/dmi/id/product_serial",
             "--device",
             "/dev/net/tun",
-            *self.loop_devices_mapping(),
+            *[f"--device={device}" for device in self.devices],
             "--name",
             "{name}",
             "{image}",
@@ -256,9 +261,6 @@ class TestNode(Container):
         if self.loop_index == 0:
             return f"/dev/loop{index}"
         return f"{self.loop_dev_name}{index}"
-
-    def loop_devices_mapping(self):
-        return [f"--device={self.device_name(i)}" for i in range(self.osd_count)]
 
     async def create_loop_device(self, index: int):
         size_gb = 5

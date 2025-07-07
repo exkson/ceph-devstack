@@ -18,7 +18,6 @@ image = "quay.io/ceph-infra/pulpito:latest"
 [containers.testnode]
 count = 3
 image = "quay.io/ceph-infra/teuthology-testnode:latest"
-osd_count = 1
 
 [containers.teuthology]
 image = "quay.io/ceph-infra/teuthology-dev:latest"

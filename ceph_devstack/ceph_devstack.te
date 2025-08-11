@@ -28,7 +28,7 @@ require {
 
 	type fixed_disk_device_t;
 	class blk_file setattr;
-    class blk_file mounton;
+	class blk_file mounton;
 
 	type fs_t;
 

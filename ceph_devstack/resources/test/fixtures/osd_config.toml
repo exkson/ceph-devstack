@@ -1,0 +1,2 @@
+[containers.testnode]
+osd_count = 8
